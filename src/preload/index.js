@@ -1,20 +1,14 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer } from 'electron'
 
-// Custom APIs for renderer
-const api = {}
-
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  window.electron = electronAPI
-  window.api = api
+// helper: listen to an event from main; returns a function that stops listening
+// eslint-disable-next-line no-unused-vars
+const on = (channel) => (callback) => {
+  const handler = (_event, data) => callback(data)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
 }
+
+contextBridge.exposeInMainWorld('api', {
+  status: () => ipcRenderer.invoke('system:status')
+  // you will add one line here for every new channel
+})

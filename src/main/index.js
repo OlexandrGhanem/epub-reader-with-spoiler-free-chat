@@ -1,7 +1,9 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { getDb } from './db'
+import { registerIpc } from './ipc'
 
 function createWindow() {
   // Create the browser window.
@@ -49,9 +51,16 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
-
+  try {
+    getDb()
+  } catch (err) {
+    // An exception here would otherwise leave a windowless process running.
+    console.error(err)
+    dialog.showErrorBox('Could not open the library database', String(err?.message ?? err))
+    app.quit()
+    return
+  }
+  registerIpc()
   createWindow()
 
   app.on('activate', function () {
