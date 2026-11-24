@@ -9,6 +9,11 @@ const on = (channel) => (callback) => {
 }
 
 contextBridge.exposeInMainWorld('api', {
-  status: () => ipcRenderer.invoke('system:status')
+  status: () => ipcRenderer.invoke('system:status'),
+  importBook: () => ipcRenderer.invoke('library:import'),
+  listBooks: () => ipcRenderer.invoke('library:list'),
+  readBook: (id) => ipcRenderer.invoke('book:read', id),
+  // args: { id, title?, author? }
+  saveMeta: (args) => ipcRenderer.invoke('book:meta', args)
   // you will add one line here for every new channel
 })
