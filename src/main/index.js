@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { getDb } from './db'
 import { registerIpc } from './ipc'
+import { backfillMeta } from './library'
 
 function createWindow() {
   // Create the browser window.
@@ -40,7 +41,7 @@ function createWindow() {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -60,6 +61,9 @@ app.whenReady().then(() => {
     app.quit()
     return
   }
+  // Before the window opens, so the first library listing already has real
+  // titles. Only does work once; never blocks startup on failure.
+  await backfillMeta().catch((err) => console.warn('Metadata backfill failed:', err))
   registerIpc()
   createWindow()
 

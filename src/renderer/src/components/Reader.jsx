@@ -119,6 +119,11 @@ export default function Reader({ bookId, onBack }) {
           errorView={<p style={{ padding: 24 }}>This EPUB could not be opened.</p>}
           getRendition={(rendition) => {
             renditionRef.current = rendition
+            // Import already stores the OPF title/author; this corrects any
+            // book whose metadata the simple import-time parser misread.
+            rendition.book.loaded.metadata
+              .then((m) => window.api.saveMeta({ id: bookId, title: m.title, author: m.creator }))
+              .catch((err) => console.warn('Could not save book metadata:', err))
           }}
         />
       </div>
