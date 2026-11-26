@@ -22,7 +22,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^13.2.0",
     "electron-updater": "^6.8.9",
-    "epubjs": "^0.4.2",
+    "epubjs": "^0.3.93",
     "jszip": "^3.10.2",
     "ollama": "^0.6.4",
     "react-reader": "^2.0.15",

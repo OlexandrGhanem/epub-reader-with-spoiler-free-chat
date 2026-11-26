@@ -1,46 +1,11 @@
 // src/renderer/src/components/Reader.jsx
 import { useEffect, useRef, useState } from 'react'
 import { ReactReader } from 'react-reader'
+import { extractChapters } from '../lib/extract'
+import { resolveTocHref } from '../lib/toc'
+import { useStore } from '../store'
 
 const isCfi = (value) => typeof value === 'string' && value.startsWith('epubcfi(')
-
-const safeDecode = (s) => {
-  try {
-    return decodeURIComponent(s)
-  } catch {
-    return s
-  }
-}
-
-// TOC hrefs are written relative to the TOC file (nav.xhtml / toc.ncx), but the
-// spine is keyed by paths relative to the package file (content.opf). When the
-// two live in different folders a raw TOC href matches nothing and epub.js
-// throws "No Section Found". Returns a spine-resolvable target, or null.
-function resolveTocHref(book, href) {
-  const spine = book?.spine
-  if (!spine || typeof href !== 'string') return null
-  const hashAt = href.indexOf('#')
-  const file = hashAt === -1 ? href : href.slice(0, hashAt)
-  const hash = hashAt === -1 ? '' : href.slice(hashAt)
-  if (!file) return null // a bare "#id" points inside the TOC file itself
-
-  const navPath = book.packaging?.navPath || book.packaging?.ncxPath || ''
-  const candidates = []
-  try {
-    // dummy origin: we only want URL's relative-path resolution ("../", "./")
-    candidates.push(new URL(file, 'http://book/' + navPath).pathname.slice(1))
-  } catch {
-    // malformed href: fall through to trying it as-is
-  }
-  candidates.push(file)
-
-  for (const candidate of candidates) {
-    for (const key of [candidate, safeDecode(candidate)]) {
-      if (spine.get(key)) return key + hash
-    }
-  }
-  return null
-}
 
 // Render as <Reader key={bookId} … /> so switching books starts from fresh state.
 // eslint-disable-next-line react/prop-types
@@ -64,6 +29,25 @@ export default function Reader({ bookId, onBack }) {
       active = false
     }
   }, [bookId])
+
+  useEffect(() => {
+    if (!data) return
+    let active = true // drop the result if the book changed or we unmounted
+    const { set } = useStore.getState()
+    set({ chapters: [] }) // don't show the previous book's text meanwhile
+    extractChapters(data).then(
+      (chapters) => {
+        if (!active) return
+        set({ chapters })
+        const total = chapters.reduce((sum, c) => sum + c.length, 0)
+        console.log(`Extracted ${chapters.length} sections, ${total} characters`)
+      },
+      (err) => active && console.warn('Could not extract book text:', err)
+    )
+    return () => {
+      active = false
+    }
+  }, [data])
 
   // react-reader calls this for two different things:
   //  - a CFI, reporting where the reader moved to (page turns, swipes)
