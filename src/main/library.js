@@ -99,6 +99,13 @@ export function updateMeta(id, title, author) {
   return true
 }
 
+// Set from the renderer's text extraction, so it uses the same character
+// count as the reading positions (progress.max_pos) it's compared against.
+export function setTotalChars(id, total) {
+  getDb().prepare('UPDATE books SET total_chars = ? WHERE id = ?').run(total, id)
+  return true
+}
+
 // One-time fix-up for books imported before import read the EPUB metadata:
 // fills in title/author for rows with no author yet. Runs once per database,
 // tracked in the settings table, so books that truly have no author aren't

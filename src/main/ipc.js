@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { checkStatus } from './llm'
-import { importBook, listBooks, readBook, updateMeta } from './library'
+import { importBook, listBooks, readBook, updateMeta, setTotalChars } from './library'
 import { saveProgress, getProgress } from './progress'
 
 export function registerIpc() {
@@ -9,6 +9,7 @@ export function registerIpc() {
   ipcMain.handle('library:list', () => listBooks())
   ipcMain.handle('book:read', (_e, id) => readBook(id))
   ipcMain.handle('book:meta', (_e, { id, title, author } = {}) => updateMeta(id, title, author))
+  ipcMain.handle('book:totalChars', (_e, { id, total }) => setTotalChars(id, total))
   ipcMain.handle('progress:save', (_e, args) => saveProgress(args))
   ipcMain.handle('progress:get', (_e, id) => getProgress(id))
 

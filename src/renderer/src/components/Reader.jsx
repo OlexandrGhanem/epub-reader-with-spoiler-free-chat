@@ -62,11 +62,16 @@ export default function Reader({ bookId, onBack }) {
     return () => saver.stop()
   }, [saver])
 
+  const [location, setLocation] = useState(0) // initial position only, never updated later
+
   useEffect(() => {
     let active = true // ignore a late reply if bookId changed or we unmounted
-    window.api.readBook(bookId).then(
-      (u8) => {
+    Promise.all([window.api.readBook(bookId), window.api.getProgress(bookId)]).then(
+      ([u8, saved]) => {
         if (!active) return
+        // reset here, not in the extraction effect, so the saved maxPos survives
+        useStore.getState().set({ chapters: [], pos: saved?.pos ?? 0, maxPos: saved?.maxPos ?? 0 })
+        if (saved?.cfi) setLocation(saved.cfi)
         // epub.js wants a plain ArrayBuffer, not a Uint8Array
         setData(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength))
       },
@@ -80,21 +85,23 @@ export default function Reader({ bookId, onBack }) {
   useEffect(() => {
     if (!data) return
     let active = true // drop the result if the book changed or we unmounted
-    const { set } = useStore.getState()
-    set({ chapters: [], pos: 0, maxPos: 0 }) // don't carry the previous book over
     extractChapters(data).then(
       (chapters) => {
         if (!active) return
-        set({ chapters })
+        useStore.getState().set({ chapters })
         const total = chapters.reduce((sum, c) => sum + c.length, 0)
         console.log(`Extracted ${chapters.length} sections, ${total} characters`)
+        // the Library's "% read" divides max_pos by this
+        window.api
+          .saveTotalChars({ id: bookId, total })
+          .catch((err) => console.warn('Could not save book length:', err))
       },
       (err) => active && console.warn('Could not extract book text:', err)
     )
     return () => {
       active = false
     }
-  }, [data])
+  }, [data, bookId])
 
   // react-reader calls this for two different things:
   //  - a CFI, reporting where the reader moved to (page turns, swipes)
@@ -141,11 +148,11 @@ export default function Reader({ bookId, onBack }) {
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <ReactReader
           url={data}
-          // Starting point only, never changed afterwards. Spine index 0 is the
-          // book's real first page; without a location react-reader opens the
-          // first TOC href, which has the same unresolved-path problem.
-          // (When progress saving lands, pass the saved CFI here instead.)
-          location={0}
+          // Starting point only, never changed afterwards: the saved CFI, or spine
+          // index 0 (the book's real first page) for a new book. Without a
+          // location react-reader opens the first TOC href, which has the same
+          // unresolved-path problem.
+          location={location}
           locationChanged={handleLocationChanged}
           errorView={<p style={{ padding: 24 }}>This EPUB could not be opened.</p>}
           getRendition={(rendition) => {
