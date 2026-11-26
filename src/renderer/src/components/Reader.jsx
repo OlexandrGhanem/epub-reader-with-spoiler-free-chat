@@ -70,7 +70,12 @@ export default function Reader({ bookId, onBack }) {
       ([u8, saved]) => {
         if (!active) return
         // reset here, not in the extraction effect, so the saved maxPos survives
-        useStore.getState().set({ chapters: [], pos: saved?.pos ?? 0, maxPos: saved?.maxPos ?? 0 })
+        useStore.getState().set({
+          chapters: [],
+          pos: saved?.pos ?? 0,
+          maxPos: saved?.maxPos ?? 0,
+          selection: null
+        })
         if (saved?.cfi) setLocation(saved.cfi)
         // epub.js wants a plain ArrayBuffer, not a Uint8Array
         setData(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength))
@@ -169,11 +174,30 @@ export default function Reader({ bookId, onBack }) {
               set({ pos, maxPos: Math.max(pos, maxPos) })
               saver.schedule({ bookId, cfi: loc.start.cfi, pos })
             })
+            rendition.on('selected', (cfiRange) => {
+              const text = rendition.getRange(cfiRange)?.toString().trim()
+              if (text) useStore.getState().set({ selection: text.slice(0, 500) })
+            })
           }}
         />
         <PosBadge />
+        <AskButton />
       </div>
     </div>
+  )
+}
+
+// floating button that appears when the reader has highlighted some text
+function AskButton() {
+  const selection = useStore((s) => s.selection)
+  if (!selection) return null
+  return (
+    <button
+      style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 10 }}
+      onClick={() => useStore.getState().set({ chatOpen: true })}
+    >
+      Ask about “{selection.length > 30 ? selection.slice(0, 30) + '…' : selection}”
+    </button>
   )
 }
 
