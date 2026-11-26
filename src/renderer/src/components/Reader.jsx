@@ -4,6 +4,7 @@ import { ReactReader } from 'react-reader'
 import { extractChapters } from '../lib/extract'
 import { resolveTocHref } from '../lib/toc'
 import { useStore } from '../store'
+import { globalOffsetFromLocation } from '../lib/position'
 
 const isCfi = (value) => typeof value === 'string' && value.startsWith('epubcfi(')
 
@@ -34,7 +35,7 @@ export default function Reader({ bookId, onBack }) {
     if (!data) return
     let active = true // drop the result if the book changed or we unmounted
     const { set } = useStore.getState()
-    set({ chapters: [] }) // don't show the previous book's text meanwhile
+    set({ chapters: [], pos: 0, maxPos: 0 }) // don't carry the previous book over
     extractChapters(data).then(
       (chapters) => {
         if (!active) return
@@ -108,9 +109,36 @@ export default function Reader({ bookId, onBack }) {
             rendition.book.loaded.metadata
               .then((m) => window.api.saveMeta({ id: bookId, title: m.title, author: m.creator }))
               .catch((err) => console.warn('Could not save book metadata:', err))
+            rendition.on('relocated', (loc) => {
+              const { chapters, maxPos, set } = useStore.getState()
+              if (!chapters.length) return
+              const pos = globalOffsetFromLocation(rendition, loc, chapters)
+              set({ pos, maxPos: Math.max(pos, maxPos) })
+            })
           }}
         />
+        <PosBadge />
       </div>
+    </div>
+  )
+}
+
+function PosBadge() {
+  const pos = useStore((s) => s.pos)
+  return (
+    // zIndex: react-reader's page area is zIndex 1 with a white background
+    <div
+      style={{
+        position: 'absolute',
+        right: 8,
+        bottom: 8,
+        zIndex: 2,
+        fontSize: 12,
+        opacity: 0.6,
+        pointerEvents: 'none' // don't block clicks on the page underneath
+      }}
+    >
+      pos {pos}
     </div>
   )
 }
