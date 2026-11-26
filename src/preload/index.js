@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('api', {
   listBooks: () => ipcRenderer.invoke('library:list'),
   readBook: (id) => ipcRenderer.invoke('book:read', id),
   // args: { id, title?, author? }
-  saveMeta: (args) => ipcRenderer.invoke('book:meta', args)
+  saveMeta: (args) => ipcRenderer.invoke('book:meta', args),
+  saveProgress: (args) => ipcRenderer.invoke('progress:save', args),
+  getProgress: (id) => ipcRenderer.invoke('progress:get', id)
   // you will add one line here for every new channel
 })

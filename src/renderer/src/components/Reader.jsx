@@ -8,6 +8,46 @@ import { globalOffsetFromLocation } from '../lib/position'
 
 const isCfi = (value) => typeof value === 'string' && value.startsWith('epubcfi(')
 
+// Debounced progress saving. Each Reader gets its own saver, so switching books
+// can't cancel another book's pending save or write its maxPos into the store.
+function createProgressSaver() {
+  let timer = null
+  let pending = null // latest unsaved { bookId, cfi, pos }
+  let active = true // false once the Reader unmounts
+
+  function flush() {
+    clearTimeout(timer)
+    const args = pending
+    pending = null
+    if (!args) return
+    window.api.saveProgress(args).then(
+      ({ maxPos }) => {
+        if (!active) return // book closed; its maxPos doesn't belong in the store
+        // A page turn during the round trip may already have raised maxPos.
+        const { maxPos: current, set } = useStore.getState()
+        set({ maxPos: Math.max(maxPos, current) })
+      },
+      (err) => console.warn('Could not save reading progress:', err)
+    )
+  }
+
+  return {
+    schedule(args) {
+      pending = args
+      clearTimeout(timer)
+      timer = setTimeout(flush, 1000) // only save after 1 s without page turns
+    },
+    start() {
+      active = true
+    },
+    // save whatever is pending right away, then ignore late replies
+    stop() {
+      active = false
+      flush()
+    }
+  }
+}
+
 // Render as <Reader key={bookId} … /> so switching books starts from fresh state.
 // eslint-disable-next-line react/prop-types
 export default function Reader({ bookId, onBack }) {
@@ -15,6 +55,12 @@ export default function Reader({ bookId, onBack }) {
   const [error, setError] = useState(null)
   const renditionRef = useRef(null)
   const currentCfiRef = useRef(null) // where the reader is now (for saving progress later)
+  const [saver] = useState(createProgressSaver)
+
+  useEffect(() => {
+    saver.start() // StrictMode remounts after a stop(), so re-arm here
+    return () => saver.stop()
+  }, [saver])
 
   useEffect(() => {
     let active = true // ignore a late reply if bookId changed or we unmounted
@@ -114,6 +160,7 @@ export default function Reader({ bookId, onBack }) {
               if (!chapters.length) return
               const pos = globalOffsetFromLocation(rendition, loc, chapters)
               set({ pos, maxPos: Math.max(pos, maxPos) })
+              saver.schedule({ bookId, cfi: loc.start.cfi, pos })
             })
           }}
         />
