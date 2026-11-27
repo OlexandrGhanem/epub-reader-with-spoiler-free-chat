@@ -6,6 +6,9 @@ import { resolveTocHref } from '../lib/toc'
 import { useStore } from '../store'
 import { globalOffsetFromLocation } from '../lib/position'
 
+// Shows the position debug overlay (PosBadge). Set to false for release.
+const DEBUG = false;
+
 const isCfi = (value) => typeof value === 'string' && value.startsWith('epubcfi(')
 
 // Reading preferences apply to every book, so they live in localStorage
@@ -139,7 +142,6 @@ export default function Reader({ bookId, onBack }) {
         if (!active) return
         useStore.getState().set({ chapters })
         const total = chapters.reduce((sum, c) => sum + c.length, 0)
-        console.log(`Extracted ${chapters.length} sections, ${total} characters`)
         // the Library's "% read" divides max_pos by this
         window.api
           .saveTotalChars({ id: bookId, total })
@@ -267,7 +269,7 @@ export default function Reader({ bookId, onBack }) {
             rendition.themes.fontSize(fontSize + '%')
           }}
         />
-        <PosBadge />
+        {DEBUG && <PosBadge />}
         <AskButton />
       </div>
     </div>
