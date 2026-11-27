@@ -1,6 +1,6 @@
 // src/renderer/src/components/Reader.jsx
 import { useEffect, useRef, useState } from 'react'
-import { ReactReader } from 'react-reader'
+import { ReactReader, ReactReaderStyle } from 'react-reader'
 import { extractChapters } from '../lib/extract'
 import { resolveTocHref } from '../lib/toc'
 import { useStore } from '../store'
@@ -8,6 +8,34 @@ import { globalOffsetFromLocation } from '../lib/position'
 
 const isCfi = (value) => typeof value === 'string' && value.startsWith('epubcfi(')
 
+// Reading preferences apply to every book, so they live in localStorage
+// rather than per-book progress.
+const MIN_FONT = 50
+const MAX_FONT = 250
+const clampFont = (n) => Math.min(MAX_FONT, Math.max(MIN_FONT, n))
+
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem('readerPrefs')) ?? {}
+    return {
+      fontSize: Number.isFinite(p.fontSize) ? clampFont(p.fontSize) : 100,
+      theme: p.theme === 'dark' ? 'dark' : 'light'
+    }
+  } catch {
+    return { fontSize: 100, theme: 'light' }
+  }
+}
+
+// react-reader's own frame (page background, arrows, TOC) for dark mode;
+// the book's iframe is styled separately through rendition.themes.
+const darkReaderStyles = {
+  ...ReactReaderStyle,
+  readerArea: { ...ReactReaderStyle.readerArea, backgroundColor: '#1e1e1e' },
+  arrow: { ...ReactReaderStyle.arrow, color: '#aaa' },
+  arrowHover: { ...ReactReaderStyle.arrowHover, color: '#fff' },
+  tocArea: { ...ReactReaderStyle.tocArea, background: '#2a2a2a', color: '#ddd' },
+  tocButtonBar: { ...ReactReaderStyle.tocButtonBar, background: '#ddd' }
+}
 // Debounced progress saving. Each Reader gets its own saver, so switching books
 // can't cancel another book's pending save or write its maxPos into the store.
 function createProgressSaver() {
@@ -63,6 +91,22 @@ export default function Reader({ bookId, onBack }) {
   }, [saver])
 
   const [location, setLocation] = useState(0) // initial position only, never updated later
+
+  const [prefs] = useState(loadPrefs)
+  const [fontSize, setFontSize] = useState(prefs.fontSize)
+  const [theme, setTheme] = useState(prefs.theme)
+
+  useEffect(() => {
+    renditionRef.current?.themes.fontSize(fontSize + '%')
+  }, [fontSize])
+
+  useEffect(() => {
+    renditionRef.current?.themes.select(theme)
+  }, [theme])
+
+  useEffect(() => {
+    localStorage.setItem('readerPrefs', JSON.stringify({ fontSize, theme }))
+  }, [fontSize, theme])
 
   useEffect(() => {
     let active = true // ignore a late reply if bookId changed or we unmounted
@@ -129,8 +173,36 @@ export default function Reader({ bookId, onBack }) {
   }
 
   const backButton = (
-    <div style={{ padding: 8 }}>
+    <div
+      style={{
+        padding: 8,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center',
+        background: theme === 'dark' ? '#2a2a2a' : undefined,
+        color: theme === 'dark' ? '#ddd' : undefined
+      }}
+    >
       <button onClick={onBack}>← Library</button>
+      <span style={{ flex: 1 }} />
+      <button
+        onClick={() => setFontSize((s) => clampFont(s - 10))}
+        disabled={fontSize <= MIN_FONT}
+        title="Smaller text"
+      >
+        A−
+      </button>
+      <span style={{ fontSize: 12, minWidth: 40, textAlign: 'center' }}>{fontSize}%</span>
+      <button
+        onClick={() => setFontSize((s) => clampFont(s + 10))}
+        disabled={fontSize >= MAX_FONT}
+        title="Larger text"
+      >
+        A+
+      </button>
+      <button onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}>
+        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      </button>
     </div>
   )
 
@@ -159,6 +231,7 @@ export default function Reader({ bookId, onBack }) {
           // unresolved-path problem.
           location={location}
           locationChanged={handleLocationChanged}
+          readerStyles={theme === 'dark' ? darkReaderStyles : ReactReaderStyle}
           errorView={<p style={{ padding: 24 }}>This EPUB could not be opened.</p>}
           getRendition={(rendition) => {
             renditionRef.current = rendition
@@ -178,6 +251,20 @@ export default function Reader({ bookId, onBack }) {
               const text = rendition.getRange(cfiRange)?.toString().trim()
               if (text) useStore.getState().set({ selection: text.slice(0, 500) })
             })
+            // Scope each theme to the class themes.select() puts on <body>.
+            // epub.js keeps every theme's <style> in the page once it has been
+            // used, so plain `body` rules from both would compete and the
+            // stylesheet that was inserted last would win forever.
+            // !important beats books that set their own body colours.
+            rendition.themes.register('dark', {
+              'body.dark': { background: '#1e1e1e !important', color: '#ddd !important' }
+            })
+            rendition.themes.register('light', {
+              'body.light': { background: '#fff !important', color: '#111 !important' }
+            })
+            // apply the current prefs; the effects above handle later changes
+            rendition.themes.select(theme)
+            rendition.themes.fontSize(fontSize + '%')
           }}
         />
         <PosBadge />
