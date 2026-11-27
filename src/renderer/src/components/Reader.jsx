@@ -288,22 +288,30 @@ function AskButton() {
   )
 }
 
+// Debug overlay: shows the global position and the text just before it,
+// so you can check the offset matches the top of the current page.
 function PosBadge() {
   const pos = useStore((s) => s.pos)
+  const chapters = useStore((s) => s.chapters)
+  const ch = chapters.find((c) => pos >= c.startPos && pos <= c.startPos + c.length)
+  const snippet = ch ? ch.text.slice(Math.max(0, pos - ch.startPos - 40), pos - ch.startPos) : ''
   return (
-    // zIndex: react-reader's page area is zIndex 1 with a white background
     <div
       style={{
         position: 'absolute',
         right: 8,
         bottom: 8,
-        zIndex: 2,
         fontSize: 12,
-        opacity: 0.6,
+        background: '#ffd',
+        color: '#111', // stay readable in dark mode
+        padding: 4,
+        maxWidth: 320,
+        zIndex: 20,
         pointerEvents: 'none' // don't block clicks on the page underneath
       }}
     >
-      pos {pos}
+      pos {pos} · section {ch?.spineIndex}
+      <br />…{snippet.replace(/\s+/g, ' ')}
     </div>
   )
 }
